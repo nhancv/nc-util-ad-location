@@ -3,6 +3,9 @@ package cvnhan.android.androidlocation;
 import android.app.Activity;
 import android.app.Fragment;
 import android.content.Context;
+import android.content.Intent;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.location.Location;
 import android.os.Bundle;
 import android.os.Handler;
@@ -27,6 +30,8 @@ import com.google.android.gms.maps.model.CameraPosition;
 import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.maps.model.Marker;
 import com.google.android.gms.maps.model.MarkerOptions;
+
+import java.util.ArrayList;
 
 //import android.location.Location;
 
@@ -100,8 +105,36 @@ public class GoogleMapSingleton {
                 googleMap.getUiSettings().setAllGesturesEnabled(true);
                 googleMap.getUiSettings().setRotateGesturesEnabled(true);
                 googleMap.setMyLocationEnabled(false);
+                googleMap.setOnInfoWindowClickListener(onInfoWindowClickListener());
             }
         }
+    }
+    private GoogleMap.OnInfoWindowClickListener onInfoWindowClickListener() {
+        return new GoogleMap.OnInfoWindowClickListener() {
+            @Override
+            public void onInfoWindowClick(Marker marker) {
+
+                String name=marker.getTitle();
+                String detail="";
+
+                if(name.equals("Shop1")){
+                    detail=Model.getListSamples().get(0).details;
+                }else if(name.equals("Shop2")){
+                    detail=Model.getListSamples().get(1).details;
+                }else if(name.equals("Shop3")){
+                    detail=Model.getListSamples().get(2).details;
+                }
+
+                Intent nextScreen = new Intent(context,
+                        DetailModel.class);
+                nextScreen.putExtra("name", name);
+                nextScreen.putExtra("detail", detail);
+                nextScreen.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                context.startActivity(nextScreen);
+            }
+
+        };
+
     }
     //////////////////////////////////////////////////////////////////////////
 
@@ -177,6 +210,7 @@ public class GoogleMapSingleton {
 
     //////////////////////////////////////////////////////////////////////////
     //Location update
+
     /**
      * Creating location request object
      */
@@ -223,7 +257,7 @@ public class GoogleMapSingleton {
                 location.getLongitude());
         // Flat markers will rotate when the map is rotated,
         // and change perspective when the map is tilted.
-        if(marker==null) {
+        if (marker == null) {
             marker = googleMap.addMarker(new MarkerOptions()
                     .icon(BitmapDescriptorFactory.fromResource(R.drawable.direction_arrow))
                     .position(latlong)
@@ -240,6 +274,7 @@ public class GoogleMapSingleton {
         // Animate the change in camera view over 2 seconds
         googleMap.animateCamera(CameraUpdateFactory.newCameraPosition(cameraPosition));
     }
+
     public void animateMarker(final Marker marker, final Location location) {
         final Handler handler = new Handler();
         final long start = SystemClock.uptimeMillis();
@@ -274,6 +309,7 @@ public class GoogleMapSingleton {
             }
         });
     }
+
     public void togglePeriodicLocationUpdates(Button UpdateLocBtn) {
         if (!mRequestingLocationUpdates) {
             // Changing the button text
@@ -292,8 +328,31 @@ public class GoogleMapSingleton {
         }
     }
 
+    public void addMarkerModel(Context context, ArrayList<Model> models) {
+        int density = (int)context.getResources().getDisplayMetrics().density;
+        for (int i = 0; i < models.size(); i++) {
+            Marker marker = googleMap.addMarker(new MarkerOptions().position(models.get(i).location).
+                    title("Shop" + (i + 1)).snippet(models.get(i).location.toString()));
+            Bitmap icon=null;
+            switch (i){
+                case 0:
+                    icon=Model.getResizedBitmap(BitmapFactory.decodeResource(context.getResources(), R.drawable.shop1),density*50, density*50);
+                    break;
+                case 1:
+                    icon=Model.getResizedBitmap(BitmapFactory.decodeResource(context.getResources(), R.drawable.shop2),density*50, density*50);
+                    break;
+                default:
+                    icon=Model.getResizedBitmap(BitmapFactory.decodeResource(context.getResources(), R.drawable.shop3),density*50, density*50);
+                    break;
+            }
+            marker.setIcon(BitmapDescriptorFactory.fromBitmap(Model.CircleBitmap(icon)));
+        }
+    }
+
+
     //////////////////////////////////////////////////////////////
     //Main Activity
+
     /**
      * call in onStart func of MainActivity
      */
@@ -305,6 +364,7 @@ public class GoogleMapSingleton {
             // Building the GoogleApi client
             instance.buildGoogleApiClient();
             instance.createLocationRequest();
+            instance.addMarkerModel(context,Model.getListSamples());
         }
     }
 
