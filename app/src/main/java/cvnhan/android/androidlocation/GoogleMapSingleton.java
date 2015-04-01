@@ -5,7 +5,11 @@ import android.app.Fragment;
 import android.content.Context;
 import android.location.Location;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.SystemClock;
 import android.util.Log;
+import android.view.animation.Interpolator;
+import android.view.animation.LinearInterpolator;
 import android.widget.Button;
 import android.widget.Toast;
 
@@ -15,11 +19,14 @@ import com.google.android.gms.common.api.GoogleApiClient;
 import com.google.android.gms.location.LocationListener;
 import com.google.android.gms.location.LocationRequest;
 import com.google.android.gms.location.LocationServices;
-import com.google.android.gms.maps.CameraUpdate;
 import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.MapFragment;
+import com.google.android.gms.maps.model.BitmapDescriptorFactory;
+import com.google.android.gms.maps.model.CameraPosition;
 import com.google.android.gms.maps.model.LatLng;
+import com.google.android.gms.maps.model.Marker;
+import com.google.android.gms.maps.model.MarkerOptions;
 
 //import android.location.Location;
 
@@ -44,6 +51,8 @@ public class GoogleMapSingleton {
     private static int UPDATE_INTERVAL = 10000; // 10 sec
     private static int FATEST_INTERVAL = 5000; // 5 sec
     private static int DISPLACEMENT = 10; // 10 meters
+
+    private Marker marker;
 
     private GoogleMapSingleton(Context _context) {
         this.context = _context;
@@ -85,13 +94,12 @@ public class GoogleMapSingleton {
                         "Sorry! unable to create maps", Toast.LENGTH_SHORT)
                         .show();
             } else {
-                googleMap.setMyLocationEnabled(true);
                 googleMap.getUiSettings().setZoomControlsEnabled(false);
                 googleMap.getUiSettings().setCompassEnabled(true);
+                googleMap.getUiSettings().setMyLocationButtonEnabled(false);
                 googleMap.getUiSettings().setAllGesturesEnabled(true);
-                googleMap.getUiSettings().setMyLocationButtonEnabled(true);
-                googleMap.getUiSettings().setRotateGesturesEnabled(false);
-
+                googleMap.getUiSettings().setRotateGesturesEnabled(true);
+                googleMap.setMyLocationEnabled(false);
             }
         }
     }
@@ -106,9 +114,9 @@ public class GoogleMapSingleton {
                 .getLastLocation(mGoogleApiClient);
 
         if (mLastLocation != null) {
+            updateCameraLocation(mLastLocation);
             double latitude = mLastLocation.getLatitude();
             double longitude = mLastLocation.getLongitude();
-
             Log.e(TAG, latitude + ", " + longitude);
 
         } else {
@@ -206,18 +214,66 @@ public class GoogleMapSingleton {
                     Toast.LENGTH_SHORT).show();
             // Displaying the new location on UI
             displayLocation();
-            updateLocation(location);
+            updateCameraLocation(location);
         }
     };
 
-    private void updateLocation(Location location) {
+    private void updateCameraLocation(Location location) {
         LatLng latlong = new LatLng(location.getLatitude(),
                 location.getLongitude());
-        CameraUpdate cameraUpdate = CameraUpdateFactory.newLatLngZoom(
-                latlong, 15);
-        googleMap.animateCamera(cameraUpdate);
+        // Flat markers will rotate when the map is rotated,
+        // and change perspective when the map is tilted.
+        if(marker==null) {
+            marker = googleMap.addMarker(new MarkerOptions()
+                    .icon(BitmapDescriptorFactory.fromResource(R.drawable.direction_arrow))
+                    .position(latlong)
+                    .flat(true)
+                    .anchor(0.5f, 0.5f)
+                    .rotation(245));
+        }
+        animateMarker(marker, location);
+        CameraPosition cameraPosition = CameraPosition.builder()
+                .target(latlong)
+                .zoom(13)
+                .bearing(90)
+                .build();
+        // Animate the change in camera view over 2 seconds
+        googleMap.animateCamera(CameraUpdateFactory.newCameraPosition(cameraPosition));
     }
+    public void animateMarker(final Marker marker, final Location location) {
+        final Handler handler = new Handler();
+        final long start = SystemClock.uptimeMillis();
+        final LatLng startLatLng = marker.getPosition();
+        final double startRotation = marker.getRotation();
+        final long duration = 500;
 
+        final Interpolator interpolator = new LinearInterpolator();
+
+        handler.post(new Runnable() {
+            @Override
+            public void run() {
+                long elapsed = SystemClock.uptimeMillis() - start;
+                float t = interpolator.getInterpolation((float) elapsed
+                        / duration);
+
+                double lng = t * location.getLongitude() + (1 - t)
+                        * startLatLng.longitude;
+                double lat = t * location.getLatitude() + (1 - t)
+                        * startLatLng.latitude;
+
+                float rotation = (float) (t * location.getBearing() + (1 - t)
+                        * startRotation);
+
+                marker.setPosition(new LatLng(lat, lng));
+                marker.setRotation(rotation);
+
+                if (t < 1.0) {
+                    // Post again 16ms later.
+                    handler.postDelayed(this, 16);
+                }
+            }
+        });
+    }
     public void togglePeriodicLocationUpdates(Button UpdateLocBtn) {
         if (!mRequestingLocationUpdates) {
             // Changing the button text
